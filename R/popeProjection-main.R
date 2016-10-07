@@ -10,13 +10,14 @@
 #' @export
 #'
 #' @examples
-autoProjector <- function(allCatches, allSurveys, surveyNames, allProjections = NULL,
-                          catchDataFactor = 1e-3){
+autoProjector <- function(allCatches, allSurveys, surveyNames, growthParams, allProjections = NULL,
+                          catchDataFactor = 1e-3, sp = "anchoveta",
+                          mortalityInfo = list(sizeM = c(0, 8, 12), vectorM = c(0.8, 0.8, 0.8)),
+                          freq = 12, Ts = 1){
 
   myFolder <- dirname(allCatches)
 
-  allCatches <- read.csv(file = allCatches, stringsAsFactors = FALSE,
-                         check.names = FALSE, row.names = 1, na.strings = 0)
+  allCatches <- readAtLength(file = allCatches, sp = sp, check.names = FALSE)
   allSurveys <- read.csv(file = allSurveys, stringsAsFactors = FALSE,
                          check.names = FALSE, row.names = 1, na.strings = 0)
 
@@ -29,10 +30,8 @@ autoProjector <- function(allCatches, allSurveys, surveyNames, allProjections = 
     stop("Lengths of surveyNames and ncol(allSurveys) must be the same.")
   }
 
-  growthParams <- allSurveys[1:4,]
-  allSurveys <-  allSurveys[5:nrow(allSurveys),]
-
-  allMarks <- seq(2, 20, 0.5)
+  spInfo <- getSpeciesInfo(sp = sp)
+  allMarks <- seq(spInfo$Lmin, spInfo$Lmax, spInfo$bin)
 
   catchDates <- getDates(colnames(allCatches))
   surveyDates <- getDates(colnames(allSurveys))
@@ -40,11 +39,10 @@ autoProjector <- function(allCatches, allSurveys, surveyNames, allProjections = 
   if(is.null(allProjections)){
     cat("\nCreating projection table...\n")
 
-    allProjections <- matrix(data = NA, nrow = length(allMarks) + 1, ncol = ncol(allCatches),
-                             dimnames = list(c("fixed", allMarks),
+    allProjections <- matrix(data = NA, nrow = length(allMarks), ncol = ncol(allCatches),
+                             dimnames = list(allMarks,
                                              paste0(substr(as.yearmon(catchDates), 1, 3), "-",
                                                     substr(as.yearmon(catchDates), 8, 9))))
-    allProjections[1,] <- 0
 
     write.csv(x = allProjections, file = file.path(myFolder, "allProjections.csv"), na = "")
 
@@ -58,54 +56,59 @@ autoProjector <- function(allCatches, allSurveys, surveyNames, allProjections = 
 
   projDates <- getDates(colnames(allProjections))
 
-  projCondition <- an(allProjections[1,])
-  allProjections <- allProjections[-1,]
+  growthParams <- read.csv(file = growthParams, stringsAsFactors = FALSE, row.names = 1)
 
-  diffIndex <- an(round(diff(surveyDates)/30, 0))
-  monthDiffs <- c(0, cumsum(diffIndex))
-  allGrowth <- matrix(data = NA, nrow = 4, ncol = ncol(allProjections),
-                      dimnames = list(rownames(growthParams), colnames(allProjections)))
-  for(i in seq(ncol(allSurveys) - 1)){
-    index <- seq(monthDiffs[i] + 1, monthDiffs[i + 1])
+  index <- as.numeric(na.omit(match(c(1, colnames(allProjections), 2), rownames(growthParams))))
+  growthParams <- growthParams[index,]
 
-    allGrowth[,index] <- matrix(rep(growthParams[,i], times = diffIndex[i]), nrow = 4)
-  }
-
+  simulation_biomass <- NULL
   for(i in seq(ncol(allProjections) - 1)){
 
     if(is.element(projDates[i], surveyDates)){
       seedLengthVector <- allSurveys[,match(projDates[i], surveyDates)]
+
+      if(i == 1){
+        allProjections[,i] <- seedLengthVector
+      }
     }else{
       seedLengthVector <- allProjections[,i]
     }
 
-    species["anchoveta", "a"] <- allGrowth["a", i]
-    species["anchoveta", "b"] <- allGrowth["b", i]
-    LHT$anchoveta$G["neutro"] <- c(allGrowth["k", i], allGrowth["Linf", i], -0.210)
-    LHT$anchoveta$M["neutro"] <- rep(0.8, 3)
-
     tempLengths <- cbind(seedLengthVector, seedLengthVector)
+    tempCatches <- allCatches[,i]
 
-    simulation <- projectPOPE(N = tempLengths, catch = allCatches[,i], scenario = "neutro",
-                                    freq = 12, sp = "anchoveta", Ts = 1)
+    simulation <- projectPOPE(N = tempLengths, catch = tempCatches,
+                              a = growthParams$a[i], b = growthParams$b[i],
+                              k = growthParams$k[i], Linf = growthParams$Linf[i],
+                              sizeM = mortalityInfo$sizeM, vectorM = mortalityInfo$vectorM,
+                              freq = freq, sp = sp, Ts = Ts)
+    simulation_abundance <- simulation$raw$N[Ts + 1,,][,1]
+    simulation_biomass <- c(simulation_biomass, simulation$raw$B[Ts + 1, 1])
 
-    if(!is.na(projCondition[i + 1]) && projCondition[i + 1] == 0){
-      allProjections[,i + 1] <- simulation$raw$N[2,,1]
-    }
+    simulation_abundance[simulation_abundance <= 0] <- 0
+    allProjections[,i + 1] <- simulation_abundance
 
   }
 
   return(list(capturas = allCatches,
               cruceros = allSurveys,
-              proyecciones = allProjections,
-              nombres_cruceros = surveyNames))
+              proyecciones = round(allProjections, 0),
+              nombres_cruceros = surveyNames,
+              biomasas = simulation_biomass))
 }
+
+
 
 #' Title
 #'
 #' @param N
 #' @param catch
-#' @param scenario
+#' @param a
+#' @param b
+#' @param k
+#' @param Linf
+#' @param sizeM
+#' @param vectorM
 #' @param freq
 #' @param sp
 #' @param Ts
@@ -114,19 +117,17 @@ autoProjector <- function(allCatches, allSurveys, surveyNames, allProjections = 
 #' @export
 #'
 #' @examples
-projectPOPE <- function(N, catch, scenario, freq, sp, Ts){
+projectPOPE <- function(N, catch, a, b, k, Linf, sizeM, vectorM, freq, sp, Ts){
 
   matrixN    <- array(dim=c(Ts+1, dim(N)))
   matrixB    <- matrix(nrow=Ts+1, ncol=ncol(N))
   matrixBD   <- matrix(nrow=Ts+1, ncol=ncol(N))
   matrixBDR  <- numeric(ncol(N))
 
-  scenario <- .getScenarios(scenario, ncol(N))
-
   for(i in seq_len(ncol(N))){
 
     N0 <- N[, i]
-    sim <- .projectPOPE(N=N0, catch=catch, scenario=scenario[i], freq=freq, sp=sp, Ts=Ts)
+    sim <- .projectPOPE(N=N0, catch=catch, a=a, b=b, k=k, Linf=Linf, sizeM=sizeM, vectorM=vectorM, freq=freq, sp=sp, Ts=Ts)
 
     matrixN[, ,i] <- sim$N
     matrixB[, i]  <- sim$B
@@ -151,4 +152,68 @@ projectPOPE <- function(N, catch, scenario, freq, sp, Ts){
   class(output) <- "surveyProj"
 
   return(output)
+}
+
+
+#' Title
+#'
+#' @param allData
+#' @param rangeDate
+#' @param nStairs
+#' @param outputDir
+#' @param outputPattern
+#' @param ...
+#'
+#' @return
+#' @export
+#'
+#' @examples
+autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", outputPattern = "Fig_", ...){
+
+  allProjections <- allData$proyecciones
+  allSurveys <- allData$cruceros
+  allCatches <- allData$capturas
+
+  index <- min(unique(an(gsub(x = rangeDate, pattern = "[[:alpha:] \\& [:punct:]]", replacement = ""))))
+  allDates <- expand.grid(month.abb_spanish, seq(index, index + 50))
+  allDates <- apply(allDates, 1, paste, collapse = "-")
+
+  if(diff(match(rangeDate, allDates)) < nStairs){
+    index <- seq(match(rangeDate[1], allDates), length.out = nStairs)
+  }else{
+    index <- seq(match(rangeDate[1], allDates),
+                 length.out = ceiling(diff(match(rangeDate, allDates))/nStairs)*nStairs)
+  }
+
+  allDates <- allDates[index]
+
+  for(i in seq(length(allDates)/nStairs)){
+
+    tempDates <- allDates[seq((nStairs - 1)*(i - 1) + 1, length.out = nStairs)]
+
+    projectionData <- surveyData <- catchData <- matrix(data = NA, nrow = nrow(allData$proyecciones), ncol = length(tempDates),
+                                                        dimnames = list(dimnames(allData$proyecciones)[[1]], tempDates))
+
+    index1 <- an(na.omit(match(colnames(allData$proyecciones), tempDates)))
+    index2 <- an(na.omit(match(tempDates, colnames(allData$proyecciones))))
+    projectionData[,index1] <- as.matrix(allData$proyecciones[,index2])
+
+    index1 <- an(na.omit(match(colnames(allData$capturas), tempDates)))
+    index2 <- an(na.omit(match(tempDates, colnames(allData$capturas))))
+    catchData[,index1] <- as.matrix(allData$capturas[,index2])
+
+    index1 <- an(na.omit(match(colnames(allData$cruceros), tempDates)))
+    index2 <- an(na.omit(match(tempDates, colnames(allData$cruceros))))
+    surveyData[,index1] <- as.matrix(allData$cruceros[,index2])
+
+    colnames(surveyData)[index1] <- allData$nombres_cruceros[index2]
+
+    makeLengthStairs(projectionData = projectionData, surveyData = surveyData, catchData = catchData, ...)
+
+    filename <- paste0(outputDir, outputPattern, tempDates[1], "-", tempDates[length(tempDates)], ".png")
+    dev.copy(png, filename = filename, width = 1000, height = nStairs*120 + 60, res = 180)
+    dev.off()
+  }
+
+  return(invisible())
 }

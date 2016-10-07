@@ -5,24 +5,6 @@ getSpeciesInfo <- function(sp, data=NULL){
 }
 
 
-.getScenarios <- function(scenario, n){
-
-  scenarios <- c("neutro", "desfavorable", "favorable")
-
-  if(is.character(scenario)){
-    if(length(scenario)!=1) stop("You can only provide one scenario")
-    return(rep(scenario, n))
-  }
-
-  if(length(scenario)!=length(scenarios))
-    stop("You must indicate one probability per scenario.")
-  set.seed(880820)
-  scenario <- sample(x=scenarios, size=n, prob = scenario, replace=TRUE)
-
-  return(scenario)
-}
-
-
 .createMarks <- function(specie, phi=FALSE){
   marks <- seq(from=specie$Lmin, to=specie$Lmax, by=specie$bin)
   if(isTRUE(phi)){
@@ -54,22 +36,19 @@ brody <- function(l, Linf, k){
 }
 
 
-lengthProjMatrix <- function(sp, scenario, freq){
+lengthProjMatrix <- function(sp, k, Linf, freq){
 
-  if(!(scenario %in% c("neutro", "favorable", "desfavorable")))
-    stop("Wrong scenario.")
-
-  dt <- 1/freq
+  dt      <- 1/freq
   species <- getSpeciesInfo(sp)
-  bin <- species$bin
+  bin     <- species$bin
 
-  marcas <- .createMarks(species)
+  marcas     <- .createMarks(species)
   marcas_phi <- .createMarks(species, phi=TRUE)
   marcas_inf <- marcas - 0.5*bin
   marcas_sup <- marcas + 0.5*bin
 
-  k    <- LHT[[sp]]$G["k", scenario]*dt
-  Linf <- LHT[[sp]]$G["Linf", scenario]
+  k    <- k*dt
+  Linf <- Linf
 
   l_inf <- brody(marcas_inf, Linf=Linf, k=k)
   l_sup <- brody(marcas_sup, Linf=Linf, k=k)
@@ -80,31 +59,29 @@ lengthProjMatrix <- function(sp, scenario, freq){
 }
 
 
-naturalMortality <- function(sp, scenario, freq){
+naturalMortality <- function(sp, vectorM, sizeM, freq){
 
-  if(!(scenario %in% c("neutro", "favorable", "desfavorable")))
-    stop("Wrong scenario.")
   dt <- 1/freq
   species <- getSpeciesInfo(sp)
   bin <- species$bin
 
   marcas <- .createMarks(species)
 
-  M_table <- LHT[[sp]]$M
+  M_table <- data.frame(size = sizeM, vectorM = vectorM)
 
   mPos <- findInterval(marcas, M_table$size)
 
-  M <- M_table[mPos, scenario]*dt
+  M <- M_table[mPos, "vectorM"]*dt
   names(M) <- marcas
 
   return(M)
 }
 
 
-.projectPOPE <- function (N0, catch, scenario, freq, sp, Ts){
+.projectPOPE <- function (N0, catch, a, b, k, Linf, sizeM, vectorM, freq, sp, Ts){
 
-  A <- lengthProjMatrix(sp=sp, scenario=scenario, freq=freq)
-  M <- naturalMortality(sp=sp, scenario=scenario, freq=freq)
+  A <- lengthProjMatrix(sp=sp, k=k, Linf=Linf, freq=freq)
+  M <- naturalMortality(sp=sp, sizeM=sizeM, vectorM=vectorM, freq=freq)
 
   N <- matrix(ncol=length(M), nrow=Ts+1)
 
@@ -118,7 +95,7 @@ naturalMortality <- function(sp, scenario, freq){
   species <- getSpeciesInfo(sp)
   marcas <- .createMarks(species)
 
-  weights <- species$a*marcas^species$b
+  weights <- a*marcas^b
 
   maturity <- .maturity.ojive(sp)
 
@@ -129,11 +106,11 @@ naturalMortality <- function(sp, scenario, freq){
   return(list(N=N, C=C, B=B, BD=BD, BDR=BDR))
 }
 
-readAtLength = function(file, sp = "anchoveta"){
+readAtLength = function(file, sp = "anchoveta", ...){
   if(is.null(file)) return(NULL)
 
-  base =  read.csv(file, stringsAsFactors = FALSE)
-  colnames(base) = tolower(colnames(base))
+  base <- read.csv(file, stringsAsFactors = FALSE, ...)
+  colnames(base)[1] <- "x"
   specie = getSpeciesInfo(sp)
   marcas = .createMarks(specie)
   newBase = expand.grid(x = marcas)
@@ -146,16 +123,11 @@ readAtLength = function(file, sp = "anchoveta"){
 
 
 .maturity.ojive = function(sp) {
-
   species = getSpeciesInfo(sp)
   marcas = .createMarks(species)
 
-  #Use "mat1" and "mat2" values of the current survey.
-  #Change the values in the species.csv (auxiliar folder,
-  #then run the script species.R and build & reload the package.)
   out = 1/(1+exp(species$mat1+species$mat2*marcas))
   return(out)
-
 }
 
 getDates <- function(x){
@@ -165,4 +137,143 @@ getDates <- function(x){
   timeVector <- as.Date(timeVector, format = "%d-%m-%y")
 
   return(timeVector)
+}
+
+
+makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = FALSE,
+                             xlim = c(2, 20, 0.5), ylimProj = NULL, ylimCatch = c(0, 50, 10),
+                             cols = c("green4", "red", "blue3"), ltys = c("solid", "solid", "dotted"),
+                             lwds = 2, main = NA, ...){
+
+  require(ruisu)
+
+  thousands <- TRUE
+
+  # Read data base
+  if(!any(is.element(c("data.frame", "matrix"), class(projectionData)))){
+    projectionData <- read.csv(file = projectionData, stringsAsFactors = FALSE, check.names = FALSE,
+                               row.names = 1)
+  }
+
+  if(!any(is.element(c("data.frame", "matrix"), class(surveyData)))){
+    surveyData <- read.csv(file = surveyData, stringsAsFactors = FALSE, check.names = FALSE,
+                           row.names = 1)
+  }
+
+  if(!any(is.element(c("data.frame", "matrix"), class(catchData)))){
+    catchData <- read.csv(file = catchData, stringsAsFactors = FALSE, check.names = FALSE,
+                          row.names = 1)
+  }
+
+  projectionData[projectionData < 0.0001] <- NA
+  surveyData[surveyData < 0.0001] <- NA
+  catchData[catchData < 0.0001] <- NA
+
+  if(isTRUE(absolute)){
+
+    if(is.null(ylimProj)){
+      newYlim <- pretty(c(0, apply(projectionData, 2, max, na.rm = TRUE)))
+      ylimProj <- c(range(newYlim), unique(diff(newYlim)))
+    }
+
+    ylimCatch <- ylimProj
+  }else{
+    ylimProj <- c(0, 20, 5)
+  }
+
+  # Check if ncol of data bases are the same
+  if(ncol(projectionData)*ncol(surveyData)*ncol(catchData) != ncol(projectionData)^3){
+    stop("All data must have the same number of columns.")
+  }
+
+  # Get length marks
+  allMarks <- an(rownames(projectionData))
+
+  # In surveyData, keep colnames only for columns where colSums > 0
+  index <- colSums(surveyData, na.rm = TRUE) > 0
+  colnames(surveyData)[!index] <- ""
+
+  # Vector of three data
+  allBases <- c("projectionData", "surveyData", "catchData")
+
+  # Standardize cols, ltys and lwds
+  cols <- rep(cols, length.out = 3)
+  ltys <- rep(ltys, length.out = 3)
+  lwds <- rep(lwds, length.out = 3)
+
+  # Set graphic parameters
+  x11()
+  par(mar = rep(0, 4), oma = c(5, 5, 4, 3), xaxs = "i", yaxs = "i", mfrow = c(ncol(projectionData), 1))
+
+  # Loop for each column (steps of stairs)
+  for(j in seq(ncol(projectionData))){
+
+    # Make an empty canvas
+    plot(1, 1, pch = NA, axes = FALSE, xlab = NA, ylab = NA, xlim = xlim[1:2], ylim = ylimProj[1:2],
+         main = main)
+
+    # Loop for each data base
+    for(i in seq_along(allBases)){
+
+      # Temporal data
+      tempData <- get(allBases[i])
+
+      # Convert to percentage
+      lengthVector <- tempData[,j]
+
+      if(!isTRUE(absolute)){
+        lengthVector <- lengthVector/sum(lengthVector, na.rm = TRUE)*100
+      }
+
+      # With catchData, it'll use ylimCatch limits
+      if(allBases[i] == "catchData"){
+
+
+        if(isTRUE(absolute)){
+          lengthVector <- lengthVector
+        }else{
+          lengthVector <- lengthVector/ylimCatch[2]*ylimProj[2]
+        }
+      }
+
+      # Make lines
+      lines(allMarks, lengthVector, col = cols[i], lty = ltys[i], lwd = lwds[i], ...)
+    }
+
+    # Juvenile line
+    abline(v = 12, lty = "dotted", col = "red")
+
+    # Make step labels
+    mtext(text = colnames(projectionData)[j], side = 3, line = -1.5, adj = 0.99)
+    mtext(text = colnames(surveyData)[j], side = 3, line = -1.5, adj = 0.01)
+
+    # Make X axis
+    if(j == ncol(projectionData)){
+      axis(side = 1, at = seq(xlim[1], xlim[2], xlim[3]), labels = NA)
+      axis(side = 1, at = seq(xlim[1], xlim[2]), tick = FALSE)
+    }
+
+    # Make Y axis
+    ylimFactor <- ifelse(isTRUE(thousands), 1e3, 1)
+
+    if(j %% 2 > 0){
+      axis(side = 2, at = seq(ylimProj[1], ylimProj[2], ylimProj[3]), las = 2,
+           labels = seq(ylimProj[1], ylimProj[2], ylimProj[3])/ylimFactor)
+    }else{
+      axis(side = 4, at = seq(ylimProj[1], ylimProj[2],
+                              length.out = (ylimCatch[2] - ylimCatch[1])/ylimCatch[3] + 1),
+           las = 2, labels = seq(ylimCatch[1], ylimCatch[2], ylimCatch[3])/ylimFactor)
+    }
+
+    box()
+  }
+
+  # X and Y axis text
+  mtext(text = paste0(ifelse(isTRUE(absolute), "", "Frecuencia ("),
+                      ifelse(isTRUE(absolute), "Millones individuos", "%"),
+                      ifelse(isTRUE(absolute), "", ")")),
+        side = 2, outer = TRUE, line = 3)
+  mtext(text = "Longitud total (cm)", side = 1, outer = TRUE, line = 3)
+
+  return(invisible())
 }

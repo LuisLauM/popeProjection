@@ -4,8 +4,10 @@
 \alias{autoProjector}
 \title{Title}
 \usage{
-autoProjector(allCatches, allSurveys, surveyNames, allProjections = NULL,
-  catchDataFactor = 0.001)
+autoProjector(allCatches, allSurveys, surveyNames, growthParams,
+  allProjections = NULL, catchDataFactor = 0.001, sp = "anchoveta",
+  mortalityInfo = list(sizeM = c(0, 8, 12), vectorM = c(0.8, 0.8, 0.8)),
+  freq = 12, Ts = 1)
 }
 \arguments{
 \item{catchDataFactor}{}
