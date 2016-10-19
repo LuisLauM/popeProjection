@@ -12,7 +12,7 @@
 #' @examples
 autoProjector <- function(allCatches, allSurveys, surveyNames, growthParams, allProjections = NULL,
                           catchDataFactor = 1e-3, sp = "anchoveta",
-                          mortalityInfo = list(sizeM = c(0, 8, 12), vectorM = c(0.8, 0.8, 0.8)),
+                          mortalityInfo = list(sizeM = c(0, 8, 12), vectorM = c(1.29, 0.92, 0.83)),
                           freq = 12, Ts = 1){
 
   myFolder <- dirname(allCatches)
@@ -93,6 +93,7 @@ autoProjector <- function(allCatches, allSurveys, surveyNames, growthParams, all
   return(list(capturas = allCatches,
               cruceros = allSurveys,
               proyecciones = round(allProjections, 0),
+              crecimiento = growthParams,
               nombres_cruceros = surveyNames,
               biomasas = simulation_biomass))
 }
@@ -206,9 +207,13 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", out
     index2 <- an(na.omit(match(tempDates, colnames(allData$cruceros))))
     surveyData[,index1] <- as.matrix(allData$cruceros[,index2])
 
+    index <- an(na.omit(match(rownames(allData$crecimiento), tempDates)))
+    growthParams <- allData$crecimiento[index,]
+
     colnames(surveyData)[index1] <- allData$nombres_cruceros[index2]
 
-    makeLengthStairs(projectionData = projectionData, surveyData = surveyData, catchData = catchData, ...)
+    makeLengthStairs(projectionData = projectionData, surveyData = surveyData, catchData = catchData,
+                     growthParams = growthParams, ...)
 
     filename <- paste0(outputDir, outputPattern, tempDates[1], "-", tempDates[length(tempDates)], ".png")
     dev.copy(png, filename = filename, width = 1000, height = nStairs*120 + 60, res = 180)
@@ -216,4 +221,86 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", out
   }
 
   return(invisible())
+}
+
+
+#' Title
+#'
+#' @param N
+#' @param catch
+#' @param a
+#' @param b
+#' @param k
+#' @param Linf
+#' @param sizeM
+#' @param vectorM
+#' @param freq
+#' @param sp
+#' @param Ts
+#'
+#' @return
+#' @export
+#'
+#' @examples
+projectPOPEInverse <- function(N, catch, a, b, k, Linf, sizeM, vectorM, freq, sp, Ts){
+
+  matrixN   <- array(dim = c(Ts + 1, dim(N)))
+  matrixB   <- matrix(nrow = Ts + 1, ncol = ncol(N))
+  matrixBD  <- matrix(nrow = Ts + 1, ncol = ncol(N))
+  matrixBDR <- numeric(ncol(N))
+
+  for(i in seq_len(ncol(N))){
+
+    N0  <- N[, i]
+    sim <- .projectPOPEInverse(N = N0, catch = catch, a = a, b = b, k = k, Linf = Linf, sizeM = sizeM,
+                               vectorM = vectorM, freq = freq, sp = sp, Ts = Ts)
+
+    matrixN[, ,i] <- sim$N
+    matrixB[, i]  <- sim$B
+    matrixBD[, i] <- sim$BD
+    matrixBDR[i]  <- sim$BDR
+  }
+
+  N    <- apply(matrixN, c(1,2), median)
+  B    <- apply(matrixB, 1, median)
+  BD   <- apply(matrixBD, 1, median)
+  BDR  <- median(matrixBDR)
+
+  rawData <- list(N = matrixN, B = matrixB, BD = matrixBD, BDR = matrixBDR)
+
+  output <- list(N = N, B = B, BD = BD, BDR = BDR, raw = rawData)
+
+  attr(output, which = "sp")   <- sp
+  attr(output, which = "freq") <- freq
+  attr(output, which = "Ts")   <- Ts
+
+  class(output) <- "surveyProj"
+
+  return(output)
+}
+
+
+#' Title
+#'
+#' @param file
+#' @param sp
+#' @param ...
+#'
+#' @return
+#' @export
+#'
+#' @examples
+readAtLength = function(file, sp = "anchoveta", ...){
+  if(is.null(file)) return(NULL)
+
+  base <- read.csv(file, stringsAsFactors = FALSE, ...)
+  colnames(base)[1] <- "x"
+  specie = getSpeciesInfo(sp)
+  marcas = .createMarks(specie)
+  newBase = expand.grid(x = marcas)
+  base = merge(base, newBase, all = T)
+  base = as.matrix(base[,-1])
+  base[is.na(base)] = 0
+
+  return(base)
 }

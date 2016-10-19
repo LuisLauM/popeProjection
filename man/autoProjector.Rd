@@ -6,7 +6,7 @@
 \usage{
 autoProjector(allCatches, allSurveys, surveyNames, growthParams,
   allProjections = NULL, catchDataFactor = 0.001, sp = "anchoveta",
-  mortalityInfo = list(sizeM = c(0, 8, 12), vectorM = c(0.8, 0.8, 0.8)),
+  mortalityInfo = list(sizeM = c(0, 8, 12), vectorM = c(1.29, 0.92, 0.83)),
   freq = 12, Ts = 1)
 }
 \arguments{

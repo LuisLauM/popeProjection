@@ -3,3 +3,5 @@
 export(autoProjector)
 export(autoProjectorPlot)
 export(projectPOPE)
+export(projectPOPEInverse)
+export(readAtLength)

@@ -106,21 +106,6 @@ naturalMortality <- function(sp, vectorM, sizeM, freq){
   return(list(N=N, C=C, B=B, BD=BD, BDR=BDR))
 }
 
-readAtLength = function(file, sp = "anchoveta", ...){
-  if(is.null(file)) return(NULL)
-
-  base <- read.csv(file, stringsAsFactors = FALSE, ...)
-  colnames(base)[1] <- "x"
-  specie = getSpeciesInfo(sp)
-  marcas = .createMarks(specie)
-  newBase = expand.grid(x = marcas)
-  base = merge(base, newBase, all = T)
-  base = as.matrix(base[,-1])
-  base[is.na(base)] = 0
-
-  return(base)
-}
-
 
 .maturity.ojive = function(sp) {
   species = getSpeciesInfo(sp)
@@ -142,6 +127,7 @@ getDates <- function(x){
 
 makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = FALSE,
                              xlim = c(2, 20, 0.5), ylimProj = NULL, ylimCatch = c(0, 50, 10),
+                             ylimBiomass = c(0, 10e6, 5e6), ylimBiomassFactor = 1e6,
                              cols = c("green4", "red", "blue3"), ltys = c("solid", "solid", "dotted"),
                              lwds = 2, main = NA, ...){
 
@@ -201,9 +187,16 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = F
   ltys <- rep(ltys, length.out = 3)
   lwds <- rep(lwds, length.out = 3)
 
+  # Build plot layout
+  groupFactor <- ncol(projectionData)
+  layoutMatrix <- matrix(rep(x = seq(groupFactor), each = 4), nrow = groupFactor, byrow = TRUE)
+  layoutMatrix <- cbind(layoutMatrix, seq(groupFactor + 1, length.out = groupFactor))
+
   # Set graphic parameters
   x11()
-  par(mar = rep(0, 4), oma = c(5, 5, 4, 3), xaxs = "i", yaxs = "i", mfrow = c(ncol(projectionData), 1))
+
+  layout(layoutMatrix)
+  par(mar = rep(0, 4), oma = c(5, 5, 4, 5), xaxs = "i", yaxs = "i")
 
   # Loop for each column (steps of stairs)
   for(j in seq(ncol(projectionData))){
@@ -237,7 +230,7 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = F
       }
 
       # Make lines
-      lines(allMarks, lengthVector, col = cols[i], lty = ltys[i], lwd = lwds[i], ...)
+      lines(allMarks, lengthVector, col = cols[i], lty = ltys[i], lwd = lwds[i])
     }
 
     # Juvenile line
@@ -268,12 +261,141 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = F
     box()
   }
 
+  # Vector of three data
+  allBases <- c("surveyData", "catchData", "projectionData")
+
+  par(mar = c(0, 4, 0, 0), xaxs = "r")
+
+  for(j in seq(ncol(projectionData))){
+
+    biomassBases <- NULL
+    for(i in seq_along(allBases)){
+      # Temporal data
+      tempData <- get(allBases[i])
+
+      # Calculate biomass
+      lengthVector <- (growthParams[j, "a"]*an(rownames(tempData))^growthParams[j, "b"])*tempData[,j]
+      biomassBases <- c(biomassBases, sum(lengthVector, na.rm = TRUE))
+    }
+
+    if(j == ncol(projectionData)){
+      names.arg <- c("Crucero", "Capturas", "Projección")
+    }else{
+      names.arg <- rep(NA, 3)
+    }
+
+    barplot(biomassBases, names.arg = names.arg, col = cols, ylim = ylimBiomass[1:2], axes = FALSE, las = 3)
+
+    xAxisLab <- seq(ylimBiomass[1], ylimBiomass[2], ylimBiomass[3])/ylimBiomassFactor
+    xAxisLab[1] <- NA
+    axis(side = 4, at = seq(ylimBiomass[1], ylimBiomass[2], ylimBiomass[3]), labels = xAxisLab, las = 2)
+    box()
+
+  }
+
   # X and Y axis text
   mtext(text = paste0(ifelse(isTRUE(absolute), "", "Frecuencia ("),
                       ifelse(isTRUE(absolute), "Millones individuos", "%"),
                       ifelse(isTRUE(absolute), "", ")")),
         side = 2, outer = TRUE, line = 3)
   mtext(text = "Longitud total (cm)", side = 1, outer = TRUE, line = 3)
+  mtext(text = "Biomasa (millones de t)", side = 4, outer = TRUE, line = 3)
 
   return(invisible())
+}
+
+
+# Inverse functions -------------------------------------------------------
+
+brodyInverse <- function(l, Linf, k){
+  out <- (l - Linf*(1-exp(-k)))/exp(-k)
+  out[out <= 2] <- 2 ####
+  return(out)
+}
+
+
+.lengthProjInverse <- function(l, marcas){
+
+  x     <- sort(c(l, marcas))
+  dif   <- diff(x)
+  pos   <- findInterval(l, marcas) + 1
+  pos   <- seq(from=pos[1], to=pos[2])
+  props <- dif[pos]
+  props <- props/sum(props)
+  out   <- numeric(length(marcas)-1)
+  out[pos-1] <- props
+  return(out)
+}
+
+
+lengthProjMatrixInverse <- function(sp, k, Linf, freq){
+
+  dt      <- 1/freq
+  species <- getSpeciesInfo(sp)
+  bin     <- species$bin
+
+  marcas     <- .createMarks(species)
+  marcas_phi <- .createMarks(species, phi=TRUE)
+  marcas_inf <- marcas - 0.5*bin
+  marcas_sup <- marcas + 0.5*bin
+
+  k    <- k*dt
+  Linf <- Linf
+
+  l_inf <- brodyInverse(marcas_inf, Linf=Linf, k=k)
+  l_sup <- brodyInverse(marcas_sup, Linf=Linf, k=k)
+  l_sup[length(l_sup)] <- rev(tail(marcas))[1] ###
+
+  newMarcas <- cbind(l_inf, l_sup)
+  A <- t(apply(newMarcas, 1, .lengthProjInverse, marcas=marcas_phi))
+  A[is.na(A)] <- 0
+  return(A)
+}
+
+
+naturalMortalityInverse <- function(sp, vectorM, sizeM, freq){
+
+  dt <- 1/freq
+  species <- getSpeciesInfo(sp)
+  bin <- species$bin
+
+  marcas  <- .createMarks(species)
+
+  M_table <- data.frame(size = sizeM, vectorM = vectorM)
+
+  mPos    <- findInterval(marcas, M_table$size)
+
+  M <- M_table[mPos, "vectorM"]*dt
+  names(M) <- marcas
+
+  return(M)
+}
+
+
+.projectPOPEInverse <- function(N0, catch, a, b, k, Linf, sizeM, vectorM, freq, sp, Ts){
+
+  A <- lengthProjMatrixInverse(sp = sp, k = k, Linf = Linf, freq = freq)
+  M <- naturalMortalityInverse(sp = sp, sizeM = sizeM, vectorM = vectorM, freq = freq)
+
+  N <- matrix(ncol = length(M), nrow = Ts + 1)
+
+  N[1, ] <- N0
+
+  for(t in seq_len(Ts)){
+    nNew <- (N[t,] + catch*exp(-M/2))/exp(-M)
+    N[t+1, ] <- as.numeric(nNew %*% A)
+  }
+
+  species <- getSpeciesInfo(sp)
+  marcas  <- .createMarks(species)
+
+  weights <- a*marcas^b
+
+  maturity <- .maturity.ojive(sp)
+
+  B   <- N %*% weights
+  BD  <- N %*% (maturity*weights)
+  BDR <- tail(BD, 1)
+
+  return(list(N = N, C = C, B = B, BD = BD, BDR = BDR))
 }
