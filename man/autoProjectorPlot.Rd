@@ -4,8 +4,10 @@
 \alias{autoProjectorPlot}
 \title{Title}
 \usage{
-autoProjectorPlot(allData, rangeDate, nStairs, outputDir = "./",
-  outputPattern = "Fig_", ...)
+autoProjectorPlot(allData, rangeDate, nStairs, addBiomassBar = TRUE,
+  absolute = FALSE, outputDir = "./", outputPattern = "Fig_",
+  width = 1200, height = nStairs * 120 + ifelse(isTRUE(addBiomassBar), 60,
+  0), res = 180, ...)
 }
 \arguments{
 \item{...}{}

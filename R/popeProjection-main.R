@@ -169,7 +169,10 @@ projectPOPE <- function(N, catch, a, b, k, Linf, sizeM, vectorM, freq, sp, Ts){
 #' @export
 #'
 #' @examples
-autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", outputPattern = "Fig_", ...){
+autoProjectorPlot <- function(allData, rangeDate, nStairs, addBiomassBar = TRUE, absolute = FALSE,
+                              outputDir = "./", outputPattern = "Fig_",
+                              width = 1200, height = nStairs*120 + ifelse(isTRUE(addBiomassBar), 60, 0), res = 180,
+                              ...){
 
   allProjections <- allData$proyecciones
   allSurveys <- allData$cruceros
@@ -180,7 +183,7 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", out
   allDates <- apply(allDates, 1, paste, collapse = "-")
 
   if(diff(match(rangeDate, allDates)) < nStairs){
-    index <- seq(match(rangeDate[1], allDates), length.out = nStairs)
+    index <- seq(match(rangeDate[1], allDates), match(rangeDate[2], allDates))
   }else{
     index <- seq(match(rangeDate[1], allDates),
                  length.out = ceiling(diff(match(rangeDate, allDates))/nStairs)*nStairs)
@@ -195,8 +198,11 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", out
     projectionData <- surveyData <- catchData <- matrix(data = NA, nrow = nrow(allData$proyecciones), ncol = length(tempDates),
                                                         dimnames = list(dimnames(allData$proyecciones)[[1]], tempDates))
 
-    index1 <- an(na.omit(match(colnames(allData$proyecciones), tempDates)))
-    index2 <- an(na.omit(match(tempDates, colnames(allData$proyecciones))))
+    index0 <- match(rangeDate, colnames(allData$proyecciones))
+    index0 <- colnames(allData$proyecciones)[seq(index0[1], index0[2])]
+
+    index1 <- an(na.omit(match(index0, tempDates)))
+    index2 <- an(na.omit(match(tempDates, index0)))
     projectionData[,index1] <- as.matrix(allData$proyecciones[,index2])
 
     index1 <- an(na.omit(match(colnames(allData$capturas), tempDates)))
@@ -213,10 +219,11 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, outputDir = "./", out
     colnames(surveyData)[index1] <- allData$nombres_cruceros[index2]
 
     makeLengthStairs(projectionData = projectionData, surveyData = surveyData, catchData = catchData,
-                     growthParams = growthParams, ...)
+                     growthParams = growthParams, addBiomassBar = addBiomassBar, absolute = absolute, ...)
 
     filename <- paste0(outputDir, outputPattern, tempDates[1], "-", tempDates[length(tempDates)], ".png")
-    dev.copy(png, filename = filename, width = 1000, height = nStairs*120 + 60, res = 180)
+
+    dev.copy(png, filename = filename, width = width, height = height, res = res)
     dev.off()
   }
 

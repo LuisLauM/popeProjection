@@ -125,7 +125,8 @@ getDates <- function(x){
 }
 
 
-makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = FALSE,
+makeLengthStairs <- function(projectionData, surveyData, catchData, growthParams,
+                             absolute = FALSE, addBiomassBar = TRUE,
                              xlim = c(2, 20, 0.5), ylimProj = NULL, ylimCatch = c(0, 50, 10),
                              ylimBiomass = c(0, 10e6, 5e6), ylimBiomassFactor = 1e6,
                              cols = c("green4", "red", "blue3"), ltys = c("solid", "solid", "dotted"),
@@ -187,15 +188,23 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = F
   ltys <- rep(ltys, length.out = 3)
   lwds <- rep(lwds, length.out = 3)
 
-  # Build plot layout
-  groupFactor <- ncol(projectionData)
-  layoutMatrix <- matrix(rep(x = seq(groupFactor), each = 4), nrow = groupFactor, byrow = TRUE)
-  layoutMatrix <- cbind(layoutMatrix, seq(groupFactor + 1, length.out = groupFactor))
+
 
   # Set graphic parameters
   x11()
 
-  layout(layoutMatrix)
+  if(isTRUE(addBiomassBar)){
+    # Build plot layout
+    groupFactor <- ncol(projectionData)
+    layoutMatrix <- matrix(rep(x = seq(groupFactor), each = 4), nrow = groupFactor, byrow = TRUE)
+    layoutMatrix <- cbind(layoutMatrix, seq(groupFactor + 1, length.out = groupFactor))
+
+    layout(layoutMatrix)
+  }else{
+   par(mfrow = c(ncol(projectionData), 1))
+  }
+
+
   par(mar = rep(0, 4), oma = c(5, 5, 4, 5), xaxs = "i", yaxs = "i")
 
   # Loop for each column (steps of stairs)
@@ -261,36 +270,38 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = F
     box()
   }
 
-  # Vector of three data
-  allBases <- c("surveyData", "catchData", "projectionData")
+  if(isTRUE(addBiomassBar)){
+    # Vector of three data
+    allBases <- c("surveyData", "catchData", "projectionData")
 
-  par(mar = c(0, 4, 0, 0), xaxs = "r")
+    par(mar = c(0, 4, 0, 0), xaxs = "r")
 
-  for(j in seq(ncol(projectionData))){
+    for(j in seq(ncol(projectionData))){
 
-    biomassBases <- NULL
-    for(i in seq_along(allBases)){
-      # Temporal data
-      tempData <- get(allBases[i])
+      biomassBases <- NULL
+      for(i in seq_along(allBases)){
+        # Temporal data
+        tempData <- get(allBases[i])
 
-      # Calculate biomass
-      lengthVector <- (growthParams[j, "a"]*an(rownames(tempData))^growthParams[j, "b"])*tempData[,j]
-      biomassBases <- c(biomassBases, sum(lengthVector, na.rm = TRUE))
+        # Calculate biomass
+        lengthVector <- (growthParams[j, "a"]*an(rownames(tempData))^growthParams[j, "b"])*tempData[,j]
+        biomassBases <- c(biomassBases, sum(lengthVector, na.rm = TRUE))
+      }
+
+      if(j == ncol(projectionData)){
+        names.arg <- c("Crucero", "Capturas", "Projección")
+      }else{
+        names.arg <- rep(NA, 3)
+      }
+
+      barplot(biomassBases, names.arg = names.arg, col = cols, ylim = ylimBiomass[1:2], axes = FALSE, las = 3)
+
+      xAxisLab <- seq(ylimBiomass[1], ylimBiomass[2], ylimBiomass[3])/ylimBiomassFactor
+      xAxisLab[1] <- NA
+      axis(side = 4, at = seq(ylimBiomass[1], ylimBiomass[2], ylimBiomass[3]), labels = xAxisLab, las = 2)
+      box()
+
     }
-
-    if(j == ncol(projectionData)){
-      names.arg <- c("Crucero", "Capturas", "Projección")
-    }else{
-      names.arg <- rep(NA, 3)
-    }
-
-    barplot(biomassBases, names.arg = names.arg, col = cols, ylim = ylimBiomass[1:2], axes = FALSE, las = 3)
-
-    xAxisLab <- seq(ylimBiomass[1], ylimBiomass[2], ylimBiomass[3])/ylimBiomassFactor
-    xAxisLab[1] <- NA
-    axis(side = 4, at = seq(ylimBiomass[1], ylimBiomass[2], ylimBiomass[3]), labels = xAxisLab, las = 2)
-    box()
-
   }
 
   # X and Y axis text
@@ -299,7 +310,10 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, absolute = F
                       ifelse(isTRUE(absolute), "", ")")),
         side = 2, outer = TRUE, line = 3)
   mtext(text = "Longitud total (cm)", side = 1, outer = TRUE, line = 3)
-  mtext(text = "Biomasa (millones de t)", side = 4, outer = TRUE, line = 3)
+
+  if(isTRUE(addBiomassBar)){
+    mtext(text = "Biomasa (millones de t)", side = 4, outer = TRUE, line = 3)
+  }
 
   return(invisible())
 }
