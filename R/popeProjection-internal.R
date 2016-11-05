@@ -130,11 +130,10 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, growthParams
                              xlim = c(2, 20, 0.5), ylimProj = NULL, ylimCatch = c(0, 50, 10),
                              ylimBiomass = c(0, 10e6, 5e6), ylimBiomassFactor = 1e6,
                              cols = c("green4", "red", "blue3"), ltys = c("solid", "solid", "dotted"),
-                             lwds = 2, main = NA, ...){
+                             lwds = 2, main = NA, thousands = FALSE, ...){
 
   require(ruisu)
 
-  thousands <- TRUE
 
   # Read data base
   if(!any(is.element(c("data.frame", "matrix"), class(projectionData)))){
@@ -205,7 +204,7 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, growthParams
   }
 
 
-  par(mar = rep(0, 4), oma = c(5, 5, 4, 5), xaxs = "i", yaxs = "i")
+  par(mar = rep(0, 4), oma = c(ifelse(isTRUE(thousands), 5, 6), 5, 4, 5), xaxs = "i", yaxs = "i")
 
   # Loop for each column (steps of stairs)
   for(j in seq(ncol(projectionData))){
@@ -308,7 +307,7 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, growthParams
   mtext(text = paste0(ifelse(isTRUE(absolute), "", "Frecuencia ("),
                       ifelse(isTRUE(absolute), "Millones individuos", "%"),
                       ifelse(isTRUE(absolute), "", ")")),
-        side = 2, outer = TRUE, line = 3)
+        side = 2, outer = TRUE, line = ifelse(isTRUE(thousands), 3, 4))
   mtext(text = "Longitud total (cm)", side = 1, outer = TRUE, line = 3)
 
   if(isTRUE(addBiomassBar)){

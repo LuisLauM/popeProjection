@@ -183,7 +183,7 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, addBiomassBar = TRUE,
   allDates <- apply(allDates, 1, paste, collapse = "-")
 
   if(diff(match(rangeDate, allDates)) < nStairs){
-    index <- seq(match(rangeDate[1], allDates), match(rangeDate[2], allDates))
+    index <- seq(match(rangeDate[1], allDates), length.out = nStairs)
   }else{
     index <- seq(match(rangeDate[1], allDates),
                  length.out = ceiling(diff(match(rangeDate, allDates))/nStairs)*nStairs)
@@ -202,7 +202,7 @@ autoProjectorPlot <- function(allData, rangeDate, nStairs, addBiomassBar = TRUE,
     index0 <- colnames(allData$proyecciones)[seq(index0[1], index0[2])]
 
     index1 <- an(na.omit(match(index0, tempDates)))
-    index2 <- an(na.omit(match(tempDates, index0)))
+    index2 <- an(na.omit(match(index0, colnames(allData$proyecciones))))
     projectionData[,index1] <- as.matrix(allData$proyecciones[,index2])
 
     index1 <- an(na.omit(match(colnames(allData$capturas), tempDates)))
