@@ -108,10 +108,10 @@ naturalMortality <- function(sp, vectorM, sizeM, freq){
 
 
 .maturity.ojive = function(sp) {
-  species = getSpeciesInfo(sp)
-  marcas = .createMarks(species)
+  specieData = getSpeciesInfo(sp)
+  marcas = .createMarks(specieData)
 
-  out = 1/(1+exp(species$mat1+species$mat2*marcas))
+  out = 1/(1+exp(specieData$mat1+specieData$mat2*marcas))
   return(out)
 }
 
