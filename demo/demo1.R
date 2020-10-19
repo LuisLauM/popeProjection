@@ -1,3 +1,6 @@
+species$Lmax[2] <- 21
+
+save(species, file = "C:/pablo/D/github/popeProjection/data/species.RData")
 
 # Proyectar hacia adelante ------------------------------------------------
 
