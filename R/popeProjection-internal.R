@@ -27,11 +27,18 @@ brody <- function(l, Linf, k){
   x <- sort(c(l, marcas))
   dif <- diff(x)
   pos <- findInterval(l, marcas) + 1
-  pos <- seq(from=pos[1], to=pos[2])
+  pos <- seq(from = pos[1], to = pos[2])
   props <- dif[pos]
   props <- props/sum(props)
-  out <- numeric(length(marcas)-1)
-  out[pos-1] <- props
+  length <- length(marcas) - 1
+  out <- numeric(length)
+  pos2 <- pos-1
+  
+  if(any(pos2 > length)){
+    out[length] <- 1
+  }else{
+    out[pos2] <- props
+  }
   return(out)
 }
 
