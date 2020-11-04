@@ -40,6 +40,7 @@ brody <- function(l, Linf, k){
     out[pos2] <- props
   }
   return(out)
+  
 }
 
 
@@ -295,7 +296,7 @@ makeLengthStairs <- function(projectionData, surveyData, catchData, growthParams
       }
 
       if(j == ncol(projectionData)){
-        names.arg <- c("Crucero", "Capturas", "Projección")
+        names.arg <- c("Crucero", "Capturas", "ProjecciÃ³n")
       }else{
         names.arg <- rep(NA, 3)
       }
